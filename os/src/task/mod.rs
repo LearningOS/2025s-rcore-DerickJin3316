@@ -14,9 +14,10 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::config::{MAX_APP_NUM, MAX_SYSCALL};
+use crate::config::MAX_APP_NUM;
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
+use hashbrown::HashMap;
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
@@ -51,11 +52,11 @@ lazy_static! {
     /// Global variable: TASK_MANAGER
     pub static ref TASK_MANAGER: TaskManager = {
         let num_app = get_num_app();
-        let mut tasks = [TaskControlBlock {
+        let mut tasks: [TaskControlBlock; MAX_APP_NUM] = core::array::from_fn(|_| TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
-            task_cnt: [0; MAX_SYSCALL]
-        }; MAX_APP_NUM];
+            task_cnt: HashMap::new()
+        });
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
             task.task_status = TaskStatus::Ready;
@@ -141,14 +142,19 @@ impl TaskManager {
     fn add_count(&self, id: usize) {
         let mut inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        inner.tasks[current].task_cnt[id] += 1;
+        inner.tasks[current].task_cnt.entry(id).and_modify(|v| *v += 1).or_insert(1);
     }
 
     /// Get task syscall count, used by sys_trace.
     fn get_count(&self, id: usize) -> usize {
         let inner = self.inner.exclusive_access();
         let current = inner.current_task;
-        inner.tasks[current].task_cnt[id] as usize
+        if let Some(cnt) = inner.tasks[current].task_cnt.get(&id) {
+            *cnt
+        }
+        else {
+            0
+        }
     }
 }
 
