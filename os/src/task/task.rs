@@ -1,6 +1,6 @@
 //! Types related to task management
 
-use hashbrown::HashMap;
+use alloc::collections::BTreeMap;
 
 use super::TaskContext;
 
@@ -13,7 +13,7 @@ pub struct TaskControlBlock {
     /// The task context
     pub task_cx: TaskContext,
     /// The task syscall count
-    pub task_cnt: HashMap<usize, usize>
+    pub task_cnt: BTreeMap<usize, usize>
 }
 
 /// The status of a task
