@@ -1,4 +1,6 @@
 //! Types related to task management
+use alloc::collections::btree_map::BTreeMap;
+
 use super::TaskContext;
 use crate::config::TRAP_CONTEXT_BASE;
 use crate::mm::{
@@ -28,6 +30,9 @@ pub struct TaskControlBlock {
 
     /// Program break
     pub program_brk: usize,
+
+    /// The task syscall count
+    pub task_cnt: BTreeMap<usize, usize>
 }
 
 impl TaskControlBlock {
@@ -38,6 +43,10 @@ impl TaskControlBlock {
     /// get the user token
     pub fn get_user_token(&self) -> usize {
         self.memory_set.token()
+    }
+    /// get the memory set
+    pub fn get_memory_set(&'static mut self) -> &'static mut MemorySet {
+        &mut self.memory_set
     }
     /// Based on the elf info in program, build the contents of task in a new address space
     pub fn new(elf_data: &[u8], app_id: usize) -> Self {
@@ -63,6 +72,7 @@ impl TaskControlBlock {
             base_size: user_sp,
             heap_bottom: user_sp,
             program_brk: user_sp,
+            task_cnt: BTreeMap::new()
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
@@ -74,6 +84,14 @@ impl TaskControlBlock {
             trap_handler as usize,
         );
         task_control_block
+    }
+    /// mmap
+    pub fn mmap(&mut self, start: usize, len: usize, prot: usize) -> isize {
+        self.memory_set.mmap(start, len, prot)
+    }
+    /// munmap
+    pub fn munmap(&mut self, start: usize, len: usize) -> isize {
+        self.memory_set.munmap(start, len)
     }
     /// change the location of the program break. return None if failed.
     pub fn change_program_brk(&mut self, size: i32) -> Option<usize> {

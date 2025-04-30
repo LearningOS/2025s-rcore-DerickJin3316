@@ -126,6 +126,20 @@ impl TaskManager {
         inner.tasks[inner.current_task].get_trap_cx()
     }
 
+    /// mmap
+    fn mmap(&self, start: usize, len: usize, prot: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].mmap(start, len, prot)
+    }
+
+    /// munmap
+    fn munmap(&self, start: usize, len: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let cur = inner.current_task;
+        inner.tasks[cur].munmap(start, len)
+    }
+
     /// Change the current 'Running' task's program break
     pub fn change_current_program_brk(&self, size: i32) -> Option<usize> {
         let mut inner = self.inner.exclusive_access();
@@ -151,6 +165,25 @@ impl TaskManager {
             // go back to user mode
         } else {
             panic!("All applications completed!");
+        }
+    }
+
+    /// Add task syscall count, used by sys_trace.
+    fn add_count(&self, id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].task_cnt.entry(id).and_modify(|v| *v += 1).or_insert(1);
+    }
+
+    /// Get task syscall count, used by sys_trace.
+    fn get_count(&self, id: usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        if let Some(cnt) = inner.tasks[current].task_cnt.get(&id) {
+            *cnt
+        }
+        else {
+            0
         }
     }
 }
@@ -198,7 +231,27 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
     TASK_MANAGER.get_current_trap_cx()
 }
 
+/// mmap
+pub fn mmap(start: usize, len: usize, prot: usize) -> isize {
+    TASK_MANAGER.mmap(start, len, prot)
+}
+
+/// munmap
+pub fn munmap(start: usize, len: usize) -> isize {
+    TASK_MANAGER.munmap(start, len)
+}
+
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Add task syscall count, used by sys_trace.
+pub fn add_count(id: usize) {
+    TASK_MANAGER.add_count(id);
+}
+
+/// Get task syscall count, used by sys_trace.
+pub fn get_count(id: usize) -> usize {
+    TASK_MANAGER.get_count(id)
 }

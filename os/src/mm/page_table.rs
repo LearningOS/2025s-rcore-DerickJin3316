@@ -179,3 +179,23 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     }
     v
 }
+
+/// Translate&Copy u8 ref through page table
+pub fn translated_byte(token: usize, ptr: *const u8, flags: PTEFlags) -> Option<&'static mut u8> {
+    let page_table = PageTable::from_token(token);
+    let start = ptr as usize;
+    let start_va = VirtAddr::from(start);
+    let vpn = start_va.floor();
+    if let Some(pte) = page_table.translate(vpn) {
+        if !pte.is_valid() || ((pte.flags() & PTEFlags::U) == PTEFlags::empty()) || ((flags & PTEFlags::W) != PTEFlags::empty() && !pte.writable()) || ((flags & PTEFlags::R) != PTEFlags::empty() && !pte.readable()) {
+            return None;
+        }
+        else {
+            let ppn = pte.ppn();
+            return Some(&mut ppn.get_bytes_array()[start_va.page_offset()])
+        }
+    }
+    else {
+        return None;
+    }
+}
