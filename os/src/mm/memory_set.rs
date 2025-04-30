@@ -11,7 +11,6 @@ use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use riscv::paging::PTE;
 use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
