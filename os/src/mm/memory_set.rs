@@ -95,6 +95,7 @@ impl MemorySet {
         self.mmaps.remove(&vpn);
         self.page_table.unmap(vpn);
     }
+    /// mmap
     pub fn mmap(
         &mut self,
         start: usize,
@@ -122,6 +123,7 @@ impl MemorySet {
         }
         0
     }
+    /// munmap
     pub fn munmap(
         &mut self,
         start: usize,
