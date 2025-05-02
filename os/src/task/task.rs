@@ -1,7 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT_BASE;
+use crate::config::{BIGSTRIDE, TRAP_CONTEXT_BASE};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
@@ -68,6 +68,12 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// priority
+    pub priority: usize,
+
+    /// stride
+    pub stride: usize,
 }
 
 impl TaskControlBlockInner {
@@ -118,6 +124,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    priority: 16,
+                    stride: 0,
                 })
             },
         };
@@ -191,6 +199,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    priority: parent_inner.priority,
+                    stride: parent_inner.stride,
                 })
             },
         });
@@ -209,6 +219,42 @@ impl TaskControlBlock {
     /// get pid of process
     pub fn getpid(&self) -> usize {
         self.pid.0
+    }
+
+    /// get stride
+    pub fn get_stride(&self) -> usize {
+        let inner = self.inner_exclusive_access();
+        inner.stride
+    }
+
+    /// set stride
+    pub fn set_stride(&self) {
+        let mut inner = self.inner_exclusive_access();
+        inner.stride += BIGSTRIDE / inner.priority
+    }
+
+    /// set priority
+    pub fn set_priority(&self, prio: isize) -> isize {
+        let mut inner = self.inner_exclusive_access();
+        if prio > 1 {
+            inner.priority = prio as usize;
+            prio
+        }
+        else {
+            -1
+        } 
+    }
+
+    /// mmap
+    pub fn mmap(&self, start: usize, len: usize, prot: usize) -> isize {
+        let mut inner = self.inner_exclusive_access();
+        inner.memory_set.mmap(start, len, prot)
+    }
+
+    /// munmap
+    pub fn munmap(&self, start: usize, len: usize) -> isize {
+        let mut inner = self.inner_exclusive_access();
+        inner.memory_set.munmap(start, len)
     }
 
     /// change the location of the program break. return None if failed.

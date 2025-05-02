@@ -34,6 +34,7 @@ lazy_static! {
 pub struct MemorySet {
     page_table: PageTable,
     areas: Vec<MapArea>,
+    mmaps: BTreeMap<VirtPageNum, FrameTracker>
 }
 
 impl MemorySet {
@@ -42,6 +43,7 @@ impl MemorySet {
         Self {
             page_table: PageTable::new(),
             areas: Vec::new(),
+            mmaps: BTreeMap::new()
         }
     }
     /// Get the page table token
@@ -81,6 +83,72 @@ impl MemorySet {
             map_area.copy_data(&mut self.page_table, data);
         }
         self.areas.push(map_area);
+    }
+    fn map_one(&mut self, vpn: VirtPageNum, flags: PTEFlags) {
+        let ppn: PhysPageNum;
+        let frame = frame_alloc().unwrap();
+        ppn = frame.ppn;
+        self.mmaps.insert(vpn, frame);
+        self.page_table.map(vpn, ppn, flags);
+    }
+    fn unmap_one(&mut self, vpn: VirtPageNum) {
+        self.mmaps.remove(&vpn);
+        self.page_table.unmap(vpn);
+    }
+    pub fn mmap(
+        &mut self,
+        start: usize,
+        len: usize,
+        prot: usize,
+    )  -> isize {
+        let start_va: VirtAddr = start.into();
+        if start_va.page_offset() != 0 || prot & !0x7 != 0 || prot & 0x7 == 0 {
+            return -1
+        }
+        let end_va: VirtAddr = (start + len).into();
+        let start_vpn: VirtPageNum = start_va.floor();
+        let end_vpn: VirtPageNum = end_va.ceil();
+        let vpn_range = VPNRange::new(start_vpn, end_vpn);
+        for vpn in vpn_range {
+            if let Some(pte) = self.page_table.translate(vpn) {
+                if pte.is_valid() {
+                    return -1
+                }
+            }
+        }
+        let flags = PTEFlags::from_bits((prot as u8) << 1).unwrap() | PTEFlags::V | PTEFlags::U;
+        for vpn in vpn_range {
+            self.map_one(vpn, flags);
+        }
+        0
+    }
+    pub fn munmap(
+        &mut self,
+        start: usize,
+        len: usize,
+    )  -> isize {
+        let start_va: VirtAddr = start.into();
+        if start_va.page_offset() != 0 {
+            return -1
+        }
+        let end_va: VirtAddr = (start + len).into();
+        let start_vpn: VirtPageNum = start_va.floor();
+        let end_vpn: VirtPageNum = end_va.ceil();
+        let vpn_range = VPNRange::new(start_vpn, end_vpn);
+        for vpn in vpn_range {
+            if let Some(pte) = self.page_table.translate(vpn) {
+                if !pte.is_valid() {
+                    return -1
+                }
+            }
+            else {
+                return -1
+            }
+        }
+        for vpn in vpn_range {
+            self.unmap_one(vpn);
+        }
+        0
     }
     /// Mention that trampoline is not collected by areas.
     fn map_trampoline(&mut self) {
