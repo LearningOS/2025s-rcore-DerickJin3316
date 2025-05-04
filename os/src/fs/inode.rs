@@ -4,14 +4,16 @@
 //!
 //! `UPSafeCell<OSInodeInner>` -> `OSInode`: for static `ROOT_INODE`,we
 //! need to wrap `OSInodeInner` into `UPSafeCell`
-use super::File;
+use core::any::Any;
+
+use super::{File, Stat, StatMode};
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
-use easy_fs::{EasyFileSystem, Inode};
+use easy_fs::{DiskInodeType, EasyFileSystem, Inode};
 use lazy_static::*;
 
 /// inode in memory
@@ -52,6 +54,18 @@ impl OSInode {
             v.extend_from_slice(&buffer[..len]);
         }
         v
+    }
+    /// stat
+    pub fn stat(&self) -> Stat {
+        let inner = self.inner.exclusive_access();
+        let stat = inner.inode.stat();
+        Stat {
+            dev: 0,
+            ino: stat.ino,
+            mode: if stat.mode == DiskInodeType::File {StatMode::FILE} else {StatMode::DIR},
+            nlink: stat.nlink,
+            pad: [0; 7]
+        }
     }
 }
 
@@ -125,6 +139,16 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     }
 }
 
+/// link
+pub fn link(old_name: &str, new_name: &str) -> isize {
+    ROOT_INODE.link(old_name, new_name)
+}
+
+/// unlink
+pub fn unlink(name: &str) -> isize {
+    ROOT_INODE.unlink(name)
+}
+
 impl File for OSInode {
     fn readable(&self) -> bool {
         self.readable
@@ -155,5 +179,8 @@ impl File for OSInode {
             total_write_size += write_size;
         }
         total_write_size
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
