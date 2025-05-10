@@ -9,14 +9,18 @@ use alloc::{collections::VecDeque, sync::Arc};
 
 /// Blocking Mutex struct
 pub struct MutexBlocking {
+    /// inner
     pub inner: UPSafeCell<MutexBlockingInner>,
 }
 
 pub struct MutexBlockingInner {
     locked: bool,
     wait_queue: VecDeque<Arc<TaskControlBlock>>,
+    /// avail
     pub avail: isize,
+    /// alloc
     pub allocation: Vec<isize>,
+    /// need
     pub need: Vec<isize>,
 }
 
